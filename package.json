@@ -1,0 +1,51 @@
+{
+  "name": "@tetherto/pear-wrk-wdk",
+  "version": "0.1.1",
+  "author": "Tether",
+  "license": "Apache-2.0",
+  "main": "index.js",
+  "type": "module",
+  "types": "./types",
+  "scripts": {
+    "build:types": "rimraf *.d.ts **/*.d.ts; tsc",
+    "lint": "standard",
+    "lint:fix": "standard --fix",
+    "gen:macos-bundle": "npx bare-pack --target darwin-arm64 --linked --out bundle/wdk-worklet.bundle.js src/wdk-worklet.js",
+    "gen:mobile-bundle": "npx bare-pack --target ios-arm64 --target ios-arm64-simulator --target ios-x64-simulator --target android-arm --target android-arm64 --target android-ia32 --target android-x64 --linked --imports ./pack.imports.json --out bundle/worklet.bundle.mjs src/wdk-worklet.js",
+    "gen:schema": "node src/schema/schema.js",
+    "postinstall": "npm run gen:mobile-bundle"
+  },
+  "dependencies": {
+    "@tetherto/wdk": "^1.0.0-beta.4",
+    "@tetherto/wdk-wallet-evm": "^1.0.0-beta.4",
+    "@tetherto/wdk-wallet-btc": "^1.0.0-beta.4",
+    "@tetherto/wdk-wallet-evm-erc-4337": "^1.0.0-beta.3",
+    "@tetherto/wdk-wallet-spark": "^1.0.0-beta.5",
+    "@tetherto/wdk-wallet-solana": "^1.0.0-beta.4",
+    "@tetherto/wdk-wallet-tron": "^1.0.0-beta.3",
+    "@tetherto/wdk-wallet-tron-gasfree": "^1.0.0-beta.3",
+    "@tetherto/wdk-wallet-ton": "^1.0.0-beta.3",
+    "@tetherto/wdk-wallet-ton-gasless": "^1.0.0-beta.3",
+    "@tetherto/wdk-protocol-lending-aave-evm": "^1.0.0-beta.3",
+    "bare-node-runtime": "^1.1.4",
+    "bare-rpc": "^1.1.0",
+    "bufferutil": "^4.1.0",
+    "utf-8-validate": "^5.0.10",
+    "ledger-bitcoin": "^0.2.2"
+  },
+  "devDependencies": {
+    "bare-pack": "^1.5.1",
+    "rimraf": "6.0.1",
+    "standard": "17.1.2",
+    "typescript": "5.8.3"
+  },
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "default": "./index.js"
+    },
+    "./package": {
+      "default": "./package.json"
+    }
+  }
+}

@@ -28,36 +28,145 @@ import AaveProtocolEvm from '@tetherto/wdk-protocol-lending-aave-evm' with { imp
  * @property {Record<string, any>} config
  */
 
-// eslint-disable-next-line no-undef
-const { IPC } = BareKit
-const rpc = new RPC(IPC, async (req) => {
-  try {
-    if (req.command === COMMANDS.PING) {
-      return req.reply(await ping())
-    }
-
-    if (req.command === COMMANDS.START) {
-      const result = await start(JSON.parse(req.data))
-      return req.reply(JSON.stringify(result))
-    }
-
-    if (req.command === COMMANDS.GET_ADDRESS) {
-      const result = await getAddress(JSON.parse(req.data))
-      return req.reply(JSON.stringify(result))
-    }
-
-    if (req.command === COMMANDS.QUOTE_LENDING_SUPPLY) {
-      const [protocolInfo, supplyOptions] = JSON.parse(req.data)
-      const result = await quoteLendingSupply(protocolInfo, supplyOptions)
-      return req.reply(JSON.stringify(result))
-    }
-  } catch (error) {
-    req.reply(JSON.stringify(rpcException({ error })))
+class WdkWorklet {
+  constructor (registry) {
+    this.registry = registry
+    /** @type {WDK} */
+    this.wdk = null
   }
-})
 
-/** @type {WDK} */
-let wdk = null
+  run () {
+    // eslint-disable-next-line no-undef
+    const { IPC } = BareKit
+    // eslint-disable-next-line no-unused-vars
+    const rpc = new RPC(IPC, async (req) => {
+      try {
+        if (req.command === COMMANDS.PING) {
+          return req.reply('hello from the other side')
+        }
+
+        if (req.command === COMMANDS.START) {
+          const result = await this.start(JSON.parse(req.data))
+          return req.reply(JSON.stringify(result))
+        }
+
+        if (req.command === COMMANDS.GET_ADDRESS) {
+          const result = await this.getAddress(JSON.parse(req.data))
+          return req.reply(JSON.stringify(result))
+        }
+
+        if (req.command === COMMANDS.QUOTE_LENDING_SUPPLY) {
+          const [protocolInfo, supplyOptions] = JSON.parse(req.data)
+          const result = await this.quoteLendingSupply(protocolInfo, supplyOptions)
+          return req.reply(JSON.stringify(result))
+        }
+      } catch (error) {
+        req.reply(JSON.stringify(rpcException({ error })))
+      }
+    })
+  }
+
+  /**
+   * @param {WdkWorkletInit} init
+   */
+  async start (init) {
+    if (this.wdk) {
+      console.log('Disposing existing WDK instance...')
+      this.wdk.dispose()
+    }
+
+    console.log('Initializing WDK with seed phrase:', {
+      seedPhraseType: typeof init.seedPhrase,
+      seedPhraseLength: init.seedPhrase?.length,
+      seedPhraseWordCount: init.seedPhrase?.split(' ').length
+    })
+
+    this.wdk = new WDK(init.seedPhrase)
+
+    const items = init.items || []
+    const registeredModules = []
+
+    for (const item of items) {
+      const Module = this.registry[item.moduleName]
+
+      if (!Module) {
+        throw new Error(`Module not found: ${item.moduleName}`)
+      }
+
+      console.log(`Registering ${item.name} wallet with config:`, {
+        moduleName: item.moduleName,
+        ...item.config
+      })
+
+      if (item.type === 'wallet') {
+        this.wdk.registerWallet(item.network, Module, item.config)
+      }
+
+      if (item.type === 'protocol') {
+        this.wdk.registerProtocol(item.network, item.name, Module, item.config)
+      }
+
+      registeredModules.push({
+        type: item.type,
+        network: item.network,
+        name: item.name,
+        moduleName: item.moduleName
+      })
+    }
+
+    console.log('WDK initialization complete')
+    return { status: 'started', modules: registeredModules }
+  }
+
+  /**
+   * @param {string[]} chains - List of chains to get address
+   */
+  async getAddress (chains) {
+    if (!this.wdk) {
+      return { status: 'failed', data: {} }
+    }
+
+    const results = await Promise.allSettled(chains.map(async (chain) => {
+      const account = await this.wdk.getAccount(chain) // need to handle index as well
+      const address = await account.getAddress()
+      return { chain, address }
+    }))
+
+    const data = {}
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        data[result.value.chain] = result.value.address
+      } else {
+        console.error(`Failed to get address for chain`, result.reason)
+      }
+    }
+
+    return { status: 'ok', data }
+  }
+
+  /**
+   * @param {Object} protocolInfo
+   * @param {string} protocolInfo.chain
+   * @param {string} protocolInfo.name - protocol name
+   * @param {Object} supplyOptions
+   * @param {string} supplyOptions.token
+   * @param {number} supplyOptions.amount
+   */
+  async quoteLendingSupply ({ chain, name }, { token, amount }) {
+    if (!this.wdk) {
+      return { status: 'failed', data: {} }
+    }
+
+    const account = await this.wdk.getAccount(chain)
+    const lendingProtocol = await account.getLendingProtocol(name)
+
+    const supplyQuote = await lendingProtocol.quoteSupply({ token, amount })
+
+    return { status: 'ok', data: supplyQuote }
+  }
+}
+
+// --- Entry Point ---
 
 const registry = {
   [MODULES.EVM_ERC_4337]: WalletManagerEvmErc4337,
@@ -72,105 +181,5 @@ const registry = {
   [MODULES.AAVE_EVM]: AaveProtocolEvm
 }
 
-async function ping () {
-  return 'hello from the other side'
-}
-
-/**
- * 
- * @param {WdkWorkletInit} init
- * @returns 
- */
-async function start (init) {
-  if (wdk) {
-    console.log('Disposing existing WDK instance...')
-    wdk.dispose()
-  }
-
-  console.log('Initializing WDK with seed phrase:', {
-    seedPhraseType: typeof init.seedPhrase,
-    seedPhraseLength: init.seedPhrase?.length,
-    seedPhraseWordCount: init.seedPhrase?.split(' ').length,
-    firstWord: init.seedPhrase?.split(' ')[0],
-    lastWord: init.seedPhrase?.split(' ')[init.seedPhrase?.split(' ').length - 1]
-  })
-
-  wdk = new WDK(init.seedPhrase)
-
-  const items = init.items || []
-  const registeredModules = []
-
-  for (const item of items) {
-    const Module = registry[item.moduleName]
-
-    if (!Module) {
-      throw new Error(`Module not found: ${item.moduleName}`)
-    }
-
-    console.log(`Registering ${item.name} wallet with config:`, {
-      moduleName: item.moduleName,
-      ...item.config
-    })
-
-    if (item.type === 'wallet') {
-      wdk.registerWallet(item.network, Module, item.config)
-    }
-
-    if (item.type === 'protocol') {
-      wdk.registerProtocol(item.network, item.name, Module, item.config)
-    }
-
-    registeredModules.push({
-      type: item.type,
-      network: item.network,
-      name: item.name,
-      moduleName: item.moduleName
-    })
-  }
-
-  console.log('WDK initialization complete')
-  return { status: 'started', modules: registeredModules }
-}
-
-/**
- * 
- * @param {string[]} chains - List of chains to get address
- * @returns 
- */
-async function getAddress(chains) {
-  if (!wdk) {
-    return { status: 'failed', data: {} }
-  }
-
-  const entries = await Promise.all(chains.map(async (chain) => {
-    const account = await wdk.getAccount(chain) // need to handle index as well
-    const address = await account.getAddress()
-
-    return [chain, address]
-  }))
-
-  return { status: 'ok', data: Object.fromEntries(entries) }
-}
-
-/**
- * 
- * @param {Object} protocolInfo
- * @param {string} protocolInfo.chain
- * @param {string} protocolInfo.name - protocol name
- * @param {Object} supplyOptions
- * @param {string} supplyOptions.token
- * @param {number} supplyOptions.amount
- * @returns 
- */
-async function quoteLendingSupply({ chain, name }, { token, amount }) {
-  if (!wdk) {
-    return { status: 'failed', data: {} }
-  }
-
-  const account = await wdk.getAccount(chain)
-  const lendingProtocol = await account.getLendingProtocol(name)
-
-  const supplyQuote = await lendingProtocol.quoteSupply({ token, amount })
-
-  return { status: 'ok', data: supplyQuote }
-}
+const worklet = new WdkWorklet(registry)
+worklet.run()

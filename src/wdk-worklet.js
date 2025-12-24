@@ -30,7 +30,9 @@ import AaveProtocolEvm from '@tetherto/wdk-protocol-lending-aave-evm' with { imp
 
 // eslint-disable-next-line no-undef
 const { IPC } = BareKit
+console.log('[WORKLET] 🟢 RPC Initialized')
 const rpc = new RPC(IPC, async (req) => {
+  console.log('[WORKLET] 📨 Request received:', req.command)
   try {
     if (req.command === COMMANDS.PING) {
       return req.reply(await ping())

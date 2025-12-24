@@ -45,6 +45,9 @@
       "types": "./types/index.d.ts",
       "default": "./index.js"
     },
+    "./bundle": {
+      "default": "./bundle/worklet.bundle.mjs"
+    },
     "./package": {
       "default": "./package.json"
     }

@@ -10,10 +10,11 @@
     "build:types": "rimraf *.d.ts **/*.d.ts; tsc",
     "lint": "standard",
     "lint:fix": "standard --fix",
-    "gen:macos-bundle": "npx bare-pack --target darwin-arm64 --linked --out bundle/wdk-worklet.bundle.js src/wdk-worklet.js",
+    "gen:macos-bundle": "npx bare-pack --target darwin-arm64 --linked --out bundle/wdk-worklet.bundle.js src/worklet.bundle.mjs",
+    "gen:linux-bundle": "npx bare-pack --target linux-x64 --imports ./pack.imports.json --out bundle/worklet.bundle.mjs src/wdk-worklet.js",
     "gen:mobile-bundle": "npx bare-pack --target ios-arm64 --target ios-arm64-simulator --target ios-x64-simulator --target android-arm --target android-arm64 --target android-ia32 --target android-x64 --linked --imports ./pack.imports.json --out bundle/worklet.bundle.mjs src/wdk-worklet.js",
     "gen:schema": "node src/schema/schema.js",
-    "postinstall": "npm run gen:mobile-bundle"
+    "postinstall": "npm run gen:linux-bundle"
   },
   "dependencies": {
     "@tetherto/wdk": "^1.0.0-beta.4",
